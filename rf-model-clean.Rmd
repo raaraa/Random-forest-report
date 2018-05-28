@@ -1,0 +1,9 @@
+---
+title: "Stock market price predictions using random forests"
+output: html_notebook
+---
+*Raul Renteria*
+
+###**Introduction**
+intro here
+
