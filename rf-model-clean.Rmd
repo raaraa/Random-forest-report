@@ -7,3 +7,158 @@ output: html_notebook
 ###**Introduction**
 intro here
 
+###**Data**
+
+###**Methodology and Model**
+
+
+###**Results**
+
+
+###**Conclusion**
+
+
+
+
+
+```{r}
+library(quantmod)
+library(rpart)
+library(rpart.plot)
+library(ROCR)
+library(caret)
+library(randomForest)
+```
+
+
+```{r}
+#start and end dates
+start <- as.Date("2000-03-12")
+end <- as.Date("2018-05-27")
+
+#period of days out to predict
+period <- 20
+```
+
+
+```{r}
+#model will use daily historical data
+stocks <- c("AAPL","NFLX", "MSFT", "AMZN")
+getSymbols(stocks, src='yahoo', from=start, to=end)
+```
+
+
+
+```{r}
+get_indicators <- function(stock, period){
+  #creating response variable. Predicting next days price, by using lag function in price_change
+  price_change <- Ad(lag(stock,-period)) - Ad(stock)
+  response <- ifelse(price_change > 0, "UP", "DOWN")
+
+  #Calculating RSI
+  rsi <- RSI(Ad(stock), n=14)
+
+  #High, Low, and adjusted close xts object
+  hlac <- as.xts(data.frame(x=Hi(stock), y=Lo(stock), z=Ad(stock)))
+  
+  #Stochastic Oscillator
+  sto <- stoch(hlac, nFastK = 14) *100
+
+  #Williams %R
+  wpr <-WPR(hlac, n=14) * (-100)
+  
+  #MACD
+  macd <- MACD(Ad(stock), nFast=12, nSlow=26, nSig=9)  
+
+  #Price Rate of Change
+  roc <- ROC(Ad(stock), n=14) *100
+
+  #On Balance Volume
+  obv <- OBV(Ad(stock), Vo(stock))
+
+  #Commodity Channel Index
+  cci <- CCI(hlac, n=20)
+  
+  #create data set with all indicators and labeled columns 
+  indicators <- data.frame(rsi, sto, wpr, macd, roc, obv, cci, response)
+  colnames(indicators) <- c("RSI", "StoFASTK","StoFASTD","StoSLOWD", 
+                          "WilliamPR", "MACD","MACDSignal", "PriceRateOfChange", 
+                          "OnBalanceVolume","cci",
+                          "Response")
+
+  #removing na values from calculations and keeping sizes of columns same
+  indicators <- indicators[-1:-35,]
+  
+  #removing na values due to lag
+  indicators <- head(indicators,-period)
+
+  return(indicators)
+}
+
+```
+
+
+
+
+```{r}
+get_indicators(NFLX, period)
+```
+
+
+
+```{r}
+get_predictions <- function(stock_indicators){
+  #Split the data in a 80-20 (train-test) ratio.
+  set.seed(100)
+  index <- sample(1:nrow(stock_indicators), size=0.2*nrow(stock_indicators))
+  test <- stock_indicators[index, ]
+  train <- stock_indicators[-index, ]
+  
+  #create model
+  model <- randomForest(train$Response ~ ., train, importance=TRUE, ntree=200, mtry=4)
+  
+  #create predictions off model
+  pred <- predict(model, test, type="class")
+  return(pred)
+}
+```
+
+
+```{r}
+get_accuracy <- function(){
+  for(stock in stocks){
+    print(stock)
+  }
+}
+```
+
+
+
+```{r}
+for(stock in stocks){
+  stock <- get(stock)
+  stock_indicators <- get_indicators(stock,period)
+  #pred <- predict(model, test, type="class")
+  #confusionMatrix(pred, test$Response)
+}
+```
+
+
+
+
+```{r}
+pred <- get_predictions(stock_indicators)
+confusionMatrix(pred, test$Response)
+```
+
+
+
+
+
+
+
+
+
+
+
+
