@@ -1,26 +1,75 @@
 ---
-title: "Stock market price predictions using random forests"
+title: "Stock market trend predictions using random forests"
 output: html_notebook
 ---
 *Raul Renteria*
 
 ###**Introduction**
-intro here
+Stock market prediction is an incredibly difficult task, due to the randmoness and noisiness found in the market. Yet, predicting market behaviors is a very important task. Correctly predicting stock price directions can be used to maximize profits, as well as to minimize risk. There are two types of methods to predicting market behavior. One is predicting the future price of an asset. This is usually done using time series analysis to fit a specific model, like ARIMA or GARCH, to some historical data. The other is predicting the future trend of an asset. That is, wether one thinks it will go up or down in price, treating it as a clasification problem. There are a fews ways this can be achieved. Some examples are found in Khaidem, Saha, and Dey's paper (TODO) and another example is found in Manojlovic and Staduhar (TODO). Both of these papers utilize machine learning techniques to predict future trends in a stock's price. The goal of this project is to create an intelligent model, using the Random Forest model, that can correctly forecast the behavior of a stock's price *n* days out.
+
 
 ###**Data**
+The data used for this project consists of regular stock data (open, close, volume, etc) from Yahoo finance, and ranges from the year 2000 to 2018. From this data, technical indicators were calculated for every stock. Many investors use technical indicators to generate signals to trade on. Below are all the technical indicators used for this model:
+
+**Relative Strength Index**
+
+**Stochastic Oscillator**
+
+**William %R**
+
+**Moving Average Convergence Divergence**
+
+**Price Rate of Change**
+
+**On Balance Volume**
+
+
+The last step of pre-processing the data was calculating the response variable. Since we are treating this as a classification problem, the response variable was binary. The equation for calculating the response variable is below:
+$$
+Response = Close_{t+n} - Close_{t}
+$$
+It states that the adjusted close price at *t+n*, where *n* is the number of days out you want to predict, minus the current adjusted close price will map to a value that says the stock price went up from the point at time *t*, or that it went down. Once the response variable was calculated, the new data sets were inspected to check for any class inbalance, below are the distributions of the response variables of each stock.
+
+```{r echo=FALSE}
+all_histograms()
+```
+
+
+The histograms reveal that there isn't much of a significant inbalance, therfore no further pre-processing is needed.
+
 
 ###**Methodology and Model**
-
+Decision trees are great for classification problems. The problem with using them is that they tend to overfit the training data, because if they are grown really deep they tend to learn the highly irregular patterns found in that perticular data set. Thus, the Random Forest model is used instead, because it eliminates the problem of overfitting by training multiple decision trees on different subsamples of the feature space. The idea behind random forests is simple. First, the data is split into differnt partitions. Then a certain number of random features is used to create and train a decision tree. This will repeat *n* number of times, where *n* is the number of trees to grow (for this project, *n* was equal to 200). Each tree will then output a prediction. Each prediction will then be calculated for number of votes, and the prediction with the highest number of votes will be the final prediction. 
 
 ###**Results**
+For evaluation of the model, the accuracy was measured. The formula for calculating the accuracy is given by:
+$$
+Accuracy = {\dfrac{TP+TN}{TP+TN+FP+FN}}
+$$
+where TP stands for the number of true positives, and TN stands for the number of true negatives. TP are positive instances classified as positive and TN are negative instances classified as negative. FP stands for the number of false positives and FN stands for the number of false negatives. False positives are negative instances classified as positive and false negatives are positive instances classified as negative (TODO). Below are all the accuracies for the model predicting from 1 to 20 days out, using AAPL,NFLX,MSFT,and AMZN. 
+
+```{r echo=FALSE}
+compare_accuracy()
+```
+
+As can be seen, the model produces very poor results with a low number or days out to predict. However, by increasing the days out, say 10 and up, the model produces significantly better results. The accuracy here ranges from 74% to 83%. Another meaure of the accuracy is the Receiver Operating Characteristic. It plots the True positive rate against the False positive rate of the model. The closer the curve is to the upper left hand side, the more acurate the test is. Below is a ROC curve for AMAZN, with a 20 day out prediction window 
+
+```{r echo=FALSE}
+get_roc_curve(model)
+```
+
+
 
 
 ###**Conclusion**
+This post demonstrated that using machine learning models to predict future stock trends can yield satisfying results, given the right parameters. The optimal number of days out to make the predictions is between 12 to 20 days. Future improvements could include incorporating fundamental analysis data, and market sentiment on the indivudual stocks using sentiment analysis.
+
+
+###**References**
 
 
 
-
-
+Code to reproduce the results:
 ```{r}
 library(quantmod)
 library(rpart)
@@ -28,6 +77,7 @@ library(rpart.plot)
 library(ROCR)
 library(caret)
 library(randomForest)
+library(plotly)
 ```
 
 
@@ -36,7 +86,7 @@ library(randomForest)
 start <- as.Date("2000-03-12")
 end <- as.Date("2018-05-27")
 
-#period of days out to predict
+#max period of days out to predict
 period <- 20
 ```
 
@@ -97,6 +147,61 @@ get_indicators <- function(stock, period){
 
 
 ```{r}
+get_histogram <- function(company) {
+  y = c() 
+  for (i in 1:20) {
+    comp <- get_indicators(company, i)
+    per <- round(table(comp$Response)[[2]] / (table(comp$Response)[[1]] + table(comp$Response)[[2]]),3)
+    y <- c(y,as.character(per))
+  }
+  return(y)
+}
+
+x <- c()
+for (i in 1:20){
+  x <- c(x, as.character(i))
+}
+xform <- list(categoryorder = "array",
+              categoryarray = x)
+```
+
+```{r}
+all_histograms <- function(){
+  y = get_histogram(AAPL)
+  p1 <- plot_ly(y=y, x=x, histfunc='sum', type = "histogram",legendgroup = "l", name = "AAPL") %>%
+              layout(yaxis=list(type='linear'),
+              hovermode = 'x',
+              xaxis = xform,
+              title = "Percentage of Up Days")
+
+  y = get_histogram(NFLX)
+  p2 <- plot_ly(y=y, x=x, histfunc='sum', type = "histogram", name = "NFLX") %>%
+              layout(yaxis=list(type='linear'),
+              hovermode = 'x',
+              xaxis = xform,
+              title = "Percentage of Up Days")
+
+  y = get_histogram(MSFT)
+  p3 <- plot_ly(y=y, x=x, histfunc='sum', type = "histogram", name = "MSFT") %>%
+              layout(yaxis=list(type='linear'),
+              hovermode = 'x',
+              xaxis = xform,
+              title = "Percentage of Up Days")
+
+  y = get_histogram(AMZN)
+  p4 <- plot_ly(y=y, x=x, histfunc='sum', type = "histogram", name = "AMZN") %>%
+              layout(yaxis=list(type='linear'),
+              hovermode = 'x',
+              xaxis = xform,
+              title = "Percentage of Up Days")
+
+  subplot(p1,p2,p3, p4, nrows = 2)
+}
+```
+
+
+
+```{r}
 get_accuracy <- function(model){
   #create predictions off model
   pred <- predict(model, test, type="class")
@@ -121,6 +226,23 @@ get_roc_curve <- function(model){
 }
 ```
 
+
+```{r}
+compare_accuracy <- function(){
+  x <- c(1:20)
+  plot_ly(accuracys, x= ~x, y= ~accuracys$AAPL, name = 'AAPL', type = 'scatter', mode = 'lines', width = 950) %>%
+          add_trace(y = ~accuracys$NFLX, name = 'NFLX', mode = 'lines') %>%
+          add_trace(y = ~accuracys$MSFT, name = 'MSFT', mode = 'lines') %>%
+          add_trace(y = ~accuracys$AMZN, name = 'AMZN', mode = 'lines') %>%
+          layout(title = 'Accuracy',
+          xaxis = list(title = 'Days Ahead',
+                      zeroline = TRUE,
+                      range = c(0, 20)),
+          yaxis = list(title = 'Accuracy',
+                      range = c(0.48,.85)),
+          hovermode='x')
+}
+```
 
 
 
@@ -153,34 +275,6 @@ for(stock in stocks){
 accuracys <- accuracys[,-1]
 colnames(accuracys) <- stocks
 ```
-
-
-
-
-```{r}
-x <- c(1:20)
-plot_ly(accuracys, x= ~x, y= ~accuracys$AAPL, name = 'AAPL', type = 'scatter', mode = 'lines', width = 950) %>%
-        add_trace(y = ~accuracys$NFLX, name = 'NFLX', mode = 'lines') %>%
-        add_trace(y = ~accuracys$MSFT, name = 'MSFT', mode = 'lines') %>%
-        add_trace(y = ~accuracys$AMZN, name = 'AMZN', mode = 'lines') %>%
-        layout(title = 'Accuracy',
-         xaxis = list(title = 'Days Ahead',
-                      zeroline = TRUE,
-                      range = c(0, 20)),
-         yaxis = list(title = 'Accuracy',
-                      range = c(0.48,.85)),
-         hovermode='x')
-```
-
-
-
-
-
-
-
-
-
-
 
 
 
